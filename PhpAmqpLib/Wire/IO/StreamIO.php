@@ -9,6 +9,8 @@ use PhpAmqpLib\Wire\AMQPWriter;
 
 class StreamIO extends AbstractIO
 {
+    const READ_BUFFER_WAIT_INTERVAL = 100000;
+
     /** @var string */
     protected $protocol;
 
@@ -50,6 +52,8 @@ class StreamIO extends AbstractIO
 
     /** @var bool */
     private $canDispatchPcntlSignal;
+    /** @var int  */
+    private $initial_heartbeat;
 
     /**
      * @param string $host
@@ -81,6 +85,7 @@ class StreamIO extends AbstractIO
         $this->context = $context;
         $this->keepalive = $keepalive;
         $this->heartbeat = $heartbeat;
+        $this->initial_heartbeat = $heartbeat;
         $this->canSelectNull = true;
         $this->canDispatchPcntlSignal = $this->isPcntlSignalEnabled();
 
@@ -224,7 +229,7 @@ class StreamIO extends AbstractIO
                 if ($this->canDispatchPcntlSignal) {
                     // prevent cpu from being consumed while waiting
                     if ($this->canSelectNull) {
-                        $this->select(null, null);
+                        $this->select(null, self::READ_BUFFER_WAIT_INTERVAL);
                         pcntl_signal_dispatch();
                     } else {
                         usleep(100000);
@@ -452,6 +457,16 @@ class StreamIO extends AbstractIO
     public function disableHeartbeat()
     {
         $this->heartbeat = 0;
+
+        return $this;
+    }
+
+    /**
+     * @return $this
+     */
+    public function reenableHeartbeat()
+    {
+        $this->heartbeat = $this->initial_heartbeat;
 
         return $this;
     }
