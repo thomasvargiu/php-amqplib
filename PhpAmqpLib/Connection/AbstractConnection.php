@@ -122,6 +122,9 @@ class AbstractConnection extends AbstractChannel
     /** @var int Maximal size of $prepare_content_cache */
     private $prepare_content_cache_max_size;
 
+    /** @var float */
+    protected $last_frame;
+
     /**
      * @param string $user
      * @param string $password
@@ -557,7 +560,20 @@ class AbstractConnection extends AbstractChannel
         $_timeout = $timeout;
         while (true) {
             $now = time();
-            list($frame_type, $frame_channel, $payload) = $this->wait_frame($_timeout);
+            try {
+                list($frame_type, $frame_channel, $payload) = $this->wait_frame($_timeout);
+            }
+            catch ( AMQPTimeoutException $e ) {
+                if ( $this->heartbeat && microtime(true) - ($this->heartbeat*2) > $this->last_frame ) {
+                    $this->debug->debug_msg("missed server heartbeat (at threshold * 2)");
+                    $this->setIsConnected(false);
+                    throw new AMQPRuntimeException("Missed server heartbeat");
+                }
+
+                throw $e;
+            }
+
+            $this->last_frame = microtime(true);
 
             if ($frame_channel === 0 && $frame_type === 8) {
                 // skip heartbeat frames and reduce the timeout by the time passed
